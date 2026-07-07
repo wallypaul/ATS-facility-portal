@@ -59,13 +59,22 @@ const ambientBg = {
   ].join(','),
 };
 
+// Soft-depth ("a little bit of neumorphism") blended onto the glass system:
+// one light source top-left, so raised surfaces get a soft light edge up-left,
+// a soft dark falloff down-right, and a 1px inner top bevel. Inputs invert to
+// inset wells. Shadows only — text contrast and borders are never traded away.
 const glassTokens = {
   light: {
     bg: 'rgba(255, 255, 255, 0.72)',
     solid: '#FFFFFF',
     border: '1px solid rgba(255, 255, 255, 0.60)',
     hairline: '1px solid rgba(18, 32, 30, 0.07)',
-    shadow: '0 1px 2px rgba(18,32,30,0.05), 0 12px 34px -10px rgba(18,32,30,0.14)',
+    shadow: [
+      '-6px -6px 16px rgba(255,255,255,0.65)',
+      '0 1px 2px rgba(18,32,30,0.05)',
+      '8px 12px 30px -10px rgba(18,32,30,0.16)',
+      'inset 0 1px 0 rgba(255,255,255,0.55)',
+    ].join(', '),
     blur: 'blur(22px) saturate(180%)',
   },
   dark: {
@@ -73,8 +82,29 @@ const glassTokens = {
     solid: '#16201E',
     border: '1px solid rgba(255, 255, 255, 0.09)',
     hairline: '1px solid rgba(255, 255, 255, 0.07)',
-    shadow: '0 1px 2px rgba(0,0,0,0.30), 0 14px 38px -10px rgba(0,0,0,0.55)',
+    shadow: [
+      '-6px -6px 16px rgba(255,255,255,0.035)',
+      '0 1px 2px rgba(0,0,0,0.30)',
+      '8px 14px 34px -10px rgba(0,0,0,0.55)',
+      'inset 0 1px 0 rgba(255,255,255,0.07)',
+    ].join(', '),
     blur: 'blur(22px) saturate(160%)',
+  },
+};
+
+// Inset "well" for text inputs and pressed states; raised/pressed for buttons.
+const neuTokens = {
+  light: {
+    well: 'inset 2px 2px 5px rgba(18,32,30,0.06), inset -2px -2px 4px rgba(255,255,255,0.85)',
+    buttonRaised:
+      '-2px -2px 6px rgba(255,255,255,0.55), 2px 3px 8px -1px rgba(10,85,75,0.40), inset 0 1px 0 rgba(255,255,255,0.22)',
+    buttonPressed: 'inset 2px 2px 6px rgba(6,17,15,0.28), inset -1px -1px 3px rgba(255,255,255,0.12)',
+  },
+  dark: {
+    well: 'inset 2px 2px 5px rgba(0,0,0,0.32), inset -2px -2px 4px rgba(255,255,255,0.04)',
+    buttonRaised:
+      '-2px -2px 6px rgba(255,255,255,0.05), 2px 3px 8px -1px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.25)',
+    buttonPressed: 'inset 2px 2px 6px rgba(0,0,0,0.45), inset -1px -1px 3px rgba(255,255,255,0.06)',
   },
 };
 
@@ -102,6 +132,7 @@ export function getTheme(mode: PaletteMode): Theme {
   const rail = railBg[mode];
 
   const g = glassTokens[mode];
+  const neu = neuTokens[mode];
 
   const theme = createTheme({
     palette: p,
@@ -217,6 +248,15 @@ export function getTheme(mode: PaletteMode): Theme {
             backgroundColor: p.primary.dark,
           },
         },
+        // Soft-raised primary action; pressing it sinks into an inset well.
+        // State-conveying only — the shadow swap reads as tactile feedback.
+        contained: {
+          boxShadow: neu.buttonRaised,
+          transition: `box-shadow 150ms ${EASE_OUT}`,
+          '&:hover': { boxShadow: neu.buttonRaised },
+          '&:active': { boxShadow: neu.buttonPressed },
+          '&.Mui-disabled': { boxShadow: 'none' },
+        },
         sizeSmall: { paddingInline: 12 },
       },
     },
@@ -263,7 +303,9 @@ export function getTheme(mode: PaletteMode): Theme {
         root: {
           borderRadius: 12,
           // Inputs stay solid (not glass) so typed text keeps full legibility.
+          // Soft inset well for depth; the border stays — never shadow-only edges.
           backgroundColor: p.background.paper,
+          boxShadow: neu.well,
           '& .MuiOutlinedInput-notchedOutline': { borderColor: p.divider },
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: p.text.secondary },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {

@@ -16,6 +16,7 @@ dist-ssr
 # Local Claude / assistant context — never commit
 .claude-context.md
 .claude/
+doc/
 
 # Editor / OS
 .vscode/*
