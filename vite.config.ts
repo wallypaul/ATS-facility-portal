@@ -5,7 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 3003,
+  },
+  preview: {
+    port: 3003,
   },
   build: {
     // MUI core + MUI X DataGrid/Pickers are legitimately large vendor chunks used
