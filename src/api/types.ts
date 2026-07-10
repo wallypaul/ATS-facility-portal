@@ -1,6 +1,15 @@
 // Types mirror the ATS payer-portal API exactly (see doc/payer-portal-flow.md and
 // the Django serializers). Field names are the server's — do not "tidy" them.
 
+// DRF paginated list envelope. `next`/`previous` are absolute URLs (or null at
+// the ends); `count` is the total across all pages.
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
 export interface User {
   uuid: string;
   username: string;
@@ -58,7 +67,10 @@ export interface ServiceData {
   comments?: string;
 }
 
-// A trip as returned by the API. price/distance are Decimal-as-string; duration is text.
+// What a PAYER reads for a trip: the full planned trip + pricing, PLUS the four
+// driver-recorded actuals (null until recorded). Read-only; a payer edits only
+// logistics via TripEditInput. price/distance are Decimal-as-string; distance is
+// miles; duration is text. See doc/frontend-trip-uuid-and-actuals.md.
 export interface Trip {
   uuid: string;
   booking_ref: string;
@@ -67,8 +79,12 @@ export interface Trip {
   date: string; // YYYY-MM-DD
   time: string; // HH:mm:ss
   price: string | null;
-  distance: string | null;
+  distance: string | null; // miles
   duration: string | null;
+  actual_pick_up_address: string | null;
+  actual_pick_up_time: string | null; // HH:mm:ss
+  actual_drop_off_address: string | null;
+  actual_drop_off_time: string | null;
 }
 
 export interface BookingListItem {

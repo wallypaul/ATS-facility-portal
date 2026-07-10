@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
-import type { GridColDef } from '@mui/x-data-grid';
+import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 
 import { PageHeader } from '../../components/PageHeader';
 import { DataTable } from '../../components/DataTable';
@@ -16,12 +16,35 @@ import type { BookingListItem } from '../../api/types';
 
 export function BookingsPage() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, error, refetch } = useBookings();
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 50,
+  });
+  const { data, isLoading, isFetching, isError, error, refetch } = useBookings({
+    page: paginationModel.page + 1, // grid is 0-based, API is 1-based
+    page_size: paginationModel.pageSize,
+  });
+  const rows = data?.results;
+  const rowCount = data?.count ?? 0;
 
-  const showPayer = useMemo(() => {
-    const names = new Set((data ?? []).map((b) => b.payer).filter(Boolean));
-    return names.size > 1;
-  }, [data]);
+  // If the current page falls past the end (e.g. bookings were removed), step back.
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(0, Math.ceil(data.count / paginationModel.pageSize) - 1);
+    if (paginationModel.page > lastPage) {
+      setPaginationModel((m) => ({ ...m, page: lastPage }));
+    }
+  }, [data, paginationModel.page, paginationModel.pageSize]);
+
+  // We can only see the current page now, so detect multi-payer stickily: once a
+  // page shows more than one payer, keep the column for the session.
+  // ponytail: a server "is_multi_payer" flag would make this exact; not worth a round-trip.
+  const [showPayer, setShowPayer] = useState(false);
+  useEffect(() => {
+    if (!rows) return;
+    const names = new Set(rows.map((b) => b.payer).filter(Boolean));
+    if (names.size > 1) setShowPayer(true);
+  }, [rows]);
 
   const columns = useMemo<GridColDef<BookingListItem>[]>(() => {
     const cols: GridColDef<BookingListItem>[] = [
@@ -86,12 +109,16 @@ export function BookingsPage() {
       />
       <DataTable<BookingListItem>
         aria-label="Bookings"
-        rows={data}
+        rows={rows}
         columns={columns}
         getRowId={(row) => row.ref}
-        loading={isLoading}
+        loading={isLoading || isFetching}
         error={isError ? error : undefined}
         onRetry={refetch}
+        paginationMode="server"
+        rowCount={rowCount}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
         initialState={{ sorting: { sortModel: [{ field: 'created_at', sort: 'desc' }] } }}
         empty={{
           title: 'No bookings yet',

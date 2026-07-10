@@ -16,6 +16,7 @@ import {
   getQuote,
   getServices,
   getTrips,
+  type PageParams,
   type TripFilters,
 } from '../api/payer';
 import { changePassword } from '../api/auth';
@@ -23,6 +24,7 @@ import { queryKeys } from './keys';
 import type {
   BookingDetail,
   BookingRequest,
+  Paginated,
   Quote,
   QuoteRequest,
   Trip,
@@ -40,8 +42,12 @@ export function useServices(payerUuid?: string) {
   });
 }
 
-export function useBookings() {
-  return useQuery({ queryKey: queryKeys.bookings(), queryFn: getBookings });
+export function useBookings(params: PageParams) {
+  return useQuery({
+    queryKey: queryKeys.bookings(params),
+    queryFn: () => getBookings(params),
+    placeholderData: (prev) => prev, // keep the current page visible while the next loads
+  });
 }
 
 export function useBooking(ref: string) {
@@ -52,16 +58,20 @@ export function useBooking(ref: string) {
   });
 }
 
-export function useTrips(filters: TripFilters) {
+export function useTrips(filters: TripFilters, params: PageParams) {
   return useQuery({
-    queryKey: queryKeys.trips(filters),
-    queryFn: () => getTrips(filters),
-    placeholderData: (prev) => prev, // keep old rows visible while refiltering
+    queryKey: queryKeys.trips(filters, params),
+    queryFn: () => getTrips(filters, params),
+    placeholderData: (prev) => prev, // keep old rows visible while refiltering / paging
   });
 }
 
-export function useInvoices() {
-  return useQuery({ queryKey: queryKeys.invoices(), queryFn: getInvoices });
+export function useInvoices(params: PageParams) {
+  return useQuery({
+    queryKey: queryKeys.invoices(params),
+    queryFn: () => getInvoices(params),
+    placeholderData: (prev) => prev, // keep the current page visible while the next loads
+  });
 }
 
 export function useInvoice(uuid: string) {
@@ -113,13 +123,13 @@ export function useChangePassword() {
 // ['booking', ref] detail. We patch both, snapshot for rollback, then resync.
 
 interface TripCacheSnapshot {
-  trips: [readonly unknown[], Trip[] | undefined][];
+  trips: [readonly unknown[], Paginated<Trip> | undefined][];
   bookings: [readonly unknown[], BookingDetail | undefined][];
 }
 
 function snapshotTripCaches(qc: QueryClient): TripCacheSnapshot {
   return {
-    trips: qc.getQueriesData<Trip[]>({ queryKey: ['trips'] }),
+    trips: qc.getQueriesData<Paginated<Trip>>({ queryKey: ['trips'] }),
     bookings: qc.getQueriesData<BookingDetail>({ queryKey: ['booking'] }),
   };
 }
@@ -134,11 +144,16 @@ function applyToTripCaches(
   uuid: string,
   transform: (trip: Trip) => Trip | null, // null => remove the trip
 ) {
-  qc.setQueriesData<Trip[]>({ queryKey: ['trips'] }, (list) =>
-    list
-      ? list.map((t) => (t.uuid === uuid ? transform(t) : t)).filter((t): t is Trip => t !== null)
-      : list,
-  );
+  // Trip lists are now paginated envelopes: patch `results`, and drop `count` by
+  // however many rows the transform removed so "X of Y" stays honest until resync.
+  qc.setQueriesData<Paginated<Trip>>({ queryKey: ['trips'] }, (page) => {
+    if (!page) return page;
+    const results = page.results
+      .map((t) => (t.uuid === uuid ? transform(t) : t))
+      .filter((t): t is Trip => t !== null);
+    const removed = page.results.length - results.length;
+    return { ...page, results, count: Math.max(0, page.count - removed) };
+  });
   qc.setQueriesData<BookingDetail>({ queryKey: ['booking'] }, (detail) =>
     detail
       ? {

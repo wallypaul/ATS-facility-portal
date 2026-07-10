@@ -45,6 +45,9 @@ interface TripDialogProps {
   services?: ServiceLevel[]; // for add-mode service_level select
 }
 
+// A payer edits logistics only (pickup/drop-off/date/time); price/distance/
+// duration are server-set and shown read-only. Edit pre-fills from the trip's
+// planned fields, which the payer read now returns.
 export function TripDialog({ open, onClose, mode, bookingRef, trip, services = [] }: TripDialogProps) {
   const toast = useToast();
   const editTrip = useEditTrip();

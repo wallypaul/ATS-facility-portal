@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid';
+import { GridActionsCellItem, type GridColDef, type GridPaginationModel } from '@mui/x-data-grid';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -13,6 +13,7 @@ import { type Dayjs } from 'dayjs';
 
 import { PageHeader } from '../../components/PageHeader';
 import { DataTable } from '../../components/DataTable';
+import { StatusChip } from '../../components/StatusChip';
 import { Ref } from '../../components/Ref';
 import { Money } from '../../components/Money';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -21,7 +22,7 @@ import { useToast } from '../../components/ToastProvider';
 import { useTrips, useCancelTrip } from '../../query/hooks';
 import type { TripFilters } from '../../api/payer';
 import { parseApiError } from '../../utils/errors';
-import { formatDate, formatDistance, formatTime } from '../../utils/format';
+import { formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
 import { API_DATE } from '../../utils/validation';
 import { MONO } from '../../theme';
 import type { Trip } from '../../api/types';
@@ -43,8 +44,32 @@ export function TripsPage() {
     return f;
   }, [from, to, exact]);
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useTrips(filters);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 50,
+  });
+
+  // A new filter set is a new result set — jump back to the first page.
+  useEffect(() => {
+    setPaginationModel((m) => ({ ...m, page: 0 }));
+  }, [filters]);
+
+  const { data, isLoading, isFetching, isError, error, refetch } = useTrips(filters, {
+    page: paginationModel.page + 1, // grid is 0-based, API is 1-based
+    page_size: paginationModel.pageSize,
+  });
+  const rows = data?.results;
+  const rowCount = data?.count ?? 0;
   const cancelTrip = useCancelTrip();
+
+  // If the current page falls past the end (e.g. trips cancelled), step back.
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(0, Math.ceil(data.count / paginationModel.pageSize) - 1);
+    if (paginationModel.page > lastPage) {
+      setPaginationModel((m) => ({ ...m, page: lastPage }));
+    }
+  }, [data, paginationModel.page, paginationModel.pageSize]);
 
   const hasFilters = Boolean(from || to || exact);
   const clear = () => {
@@ -53,12 +78,22 @@ export function TripsPage() {
     setExact(null);
   };
 
+  // Server returns trips newest-first (-date,-time) and we page server-side, so a
+  // client column sort would only reorder the visible page — disable it and trust
+  // the server order. Status is derived from which actuals the driver has recorded.
+  const mono = (value: string) => (
+    <Box component="span" sx={{ fontFamily: MONO, fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums' }}>
+      {value}
+    </Box>
+  );
+
   const columns = useMemo<GridColDef<Trip>[]>(
     () => [
       {
         field: 'booking_ref',
         headerName: 'Booking',
-        width: 190,
+        width: 180,
+        sortable: false,
         renderCell: (p) =>
           p.row.booking_ref ? (
             <Ref value={p.row.booking_ref} to={`/bookings/${encodeURIComponent(p.row.booking_ref)}`} label="booking ref" />
@@ -66,49 +101,46 @@ export function TripsPage() {
             '—'
           ),
       },
-      { field: 'pick_up_address', headerName: 'Pickup', flex: 1, minWidth: 160 },
-      { field: 'drop_off_address', headerName: 'Drop-off', flex: 1, minWidth: 160 },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 130,
+        sortable: false,
+        renderCell: (p) => <StatusChip status={tripStatus(p.row)} />,
+      },
+      { field: 'pick_up_address', headerName: 'Pickup', flex: 1, minWidth: 160, sortable: false },
+      { field: 'drop_off_address', headerName: 'Drop-off', flex: 1, minWidth: 160, sortable: false },
       {
         field: 'date',
         headerName: 'Date',
-        width: 130,
-        renderCell: (p) => (
-          <Box component="span" sx={{ fontFamily: MONO, fontSize: '0.8125rem' }}>
-            {formatDate(p.row.date)}
-          </Box>
-        ),
+        width: 120,
+        sortable: false,
+        renderCell: (p) => mono(formatDate(p.row.date)),
       },
       {
         field: 'time',
         headerName: 'Time',
         width: 100,
-        renderCell: (p) => (
-          <Box component="span" sx={{ fontFamily: MONO, fontSize: '0.8125rem' }}>
-            {formatTime(p.row.time)}
-          </Box>
-        ),
+        sortable: false,
+        renderCell: (p) => mono(formatTime(p.row.time)),
       },
       {
         field: 'price',
-        headerName: 'Price',
+        headerName: 'Fare',
         width: 110,
         align: 'right',
         headerAlign: 'right',
-        sortComparator: (a, b) => Number(a ?? 0) - Number(b ?? 0),
+        sortable: false,
         renderCell: (p) => <Money value={p.row.price} />,
       },
       {
         field: 'distance',
-        headerName: 'Distance',
+        headerName: 'Miles',
         width: 110,
         align: 'right',
         headerAlign: 'right',
-        sortComparator: (a, b) => Number(a ?? 0) - Number(b ?? 0),
-        renderCell: (p) => (
-          <Box component="span" sx={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontSize: '0.8125rem' }}>
-            {formatDistance(p.row.distance)}
-          </Box>
-        ),
+        sortable: false,
+        renderCell: (p) => mono(formatDistance(p.row.distance)),
       },
       {
         field: 'actions',
@@ -149,7 +181,10 @@ export function TripsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <PageHeader title="Trips" subtitle="All scheduled trips for your facility." />
+      <PageHeader
+        title="Trips"
+        subtitle="All trips for your facility — most recent first."
+      />
 
       <Card sx={{ p: 2, mb: 2 }}>
         <Stack
@@ -203,13 +238,16 @@ export function TripsPage() {
 
       <DataTable<Trip>
         aria-label="Trips"
-        rows={data}
+        rows={rows}
         columns={columns}
         getRowId={(row) => row.uuid}
         loading={isLoading || isFetching}
         error={isError ? error : undefined}
         onRetry={refetch}
-        initialState={{ sorting: { sortModel: [{ field: 'date', sort: 'desc' }] } }}
+        paginationMode="server"
+        rowCount={rowCount}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
         empty={{
           title: hasFilters ? 'No trips in this range' : 'No trips yet',
           description: hasFilters
@@ -240,7 +278,7 @@ export function TripsPage() {
           confirmCancel
             ? `${confirmCancel.pick_up_address} → ${confirmCancel.drop_off_address} on ${formatDate(
                 confirmCancel.date,
-              )}. This can't be undone.`
+              )} at ${formatTime(confirmCancel.time)}. This can't be undone.`
             : ''
         }
         confirmLabel="Cancel trip"

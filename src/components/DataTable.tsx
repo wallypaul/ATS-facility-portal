@@ -4,6 +4,7 @@ import {
   DataGrid,
   type DataGridProps,
   type GridColDef,
+  type GridPaginationModel,
   type GridRowIdGetter,
   type GridValidRowModel,
 } from '@mui/x-data-grid';
@@ -29,6 +30,13 @@ interface DataTableProps<R extends GridValidRowModel> {
   pageSizeOptions?: number[];
   minHeight?: number | string;
   'aria-label'?: string;
+  // Server-side pagination: pass all three to let the backend page the data.
+  // `rowCount` is the server's total (drives the footer "X of Y" and page count);
+  // the model is controlled by the caller. Omit them for the default client paging.
+  paginationMode?: 'client' | 'server';
+  rowCount?: number;
+  paginationModel?: GridPaginationModel;
+  onPaginationModelChange?: (model: GridPaginationModel) => void;
 }
 
 // Thin, opinionated DataGrid: divider-bordered flat surface, skeleton rows while
@@ -46,6 +54,10 @@ export function DataTable<R extends GridValidRowModel>({
   pageSizeOptions = [10, 25, 50, 100],
   minHeight = 360,
   'aria-label': ariaLabel,
+  paginationMode = 'client',
+  rowCount,
+  paginationModel,
+  onPaginationModelChange,
 }: DataTableProps<R>) {
   const slots = useMemo<DataGridProps['slots']>(
     () =>
@@ -96,12 +108,18 @@ export function DataTable<R extends GridValidRowModel>({
         columnHeaderHeight={44}
         rowHeight={52}
         pageSizeOptions={pageSizeOptions}
+        paginationMode={paginationMode}
+        rowCount={paginationMode === 'server' ? rowCount : undefined}
+        paginationModel={paginationModel}
+        onPaginationModelChange={onPaginationModelChange}
         slots={slots}
         slotProps={{
           loadingOverlay: { variant: 'skeleton', noRowsVariant: 'skeleton' },
         }}
         initialState={{
-          pagination: { paginationModel: { pageSize: 25, page: 0 } },
+          // Only seed an uncontrolled page model in client mode; in server mode the
+          // caller controls `paginationModel`, and setting both would warn.
+          ...(paginationModel ? {} : { pagination: { paginationModel: { pageSize: 25, page: 0 } } }),
           ...initialState,
         }}
         sx={(theme) => ({

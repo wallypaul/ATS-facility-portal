@@ -9,7 +9,6 @@ import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
-import Chip from '@mui/material/Chip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -27,7 +26,7 @@ import { TripDialog } from '../../components/TripDialog';
 import { useToast } from '../../components/ToastProvider';
 import { useBooking, useCancelTrip, useServices } from '../../query/hooks';
 import { parseApiError } from '../../utils/errors';
-import { formatDate, formatDistance, formatTime } from '../../utils/format';
+import { formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
 import type { Passenger, Trip } from '../../api/types';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -62,17 +61,18 @@ function PassengerSummary({ p }: { p: Passenger }) {
   );
 }
 
-function TripRow({
-  trip,
-  onEdit,
-  onCancel,
-}: {
-  trip: Trip;
-  onEdit: () => void;
-  onCancel: () => void;
-}) {
+function TripRow({ trip, onEdit, onCancel }: { trip: Trip; onEdit: () => void; onCancel: () => void }) {
+  // The driver records the four actuals independently, so each gets its own slot.
+  // Null == not yet logged; we surface a single "awaiting" note when none exist
+  // rather than repeating it four times.
+  const noActuals =
+    !trip.actual_pick_up_address &&
+    !trip.actual_pick_up_time &&
+    !trip.actual_drop_off_address &&
+    !trip.actual_drop_off_time;
   return (
     <Box sx={{ py: 2 }}>
+      {/* Planned */}
       <Stack
         direction={{ xs: 'column', md: 'row' }}
         sx={{ gap: 2, alignItems: { md: 'center' }, justifyContent: 'space-between' }}
@@ -82,6 +82,7 @@ function TripRow({
             direction="row"
             sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', color: 'text.primary' }}
           >
+            <StatusChip status={tripStatus(trip)} />
             <Typography sx={{ fontWeight: 600 }}>{trip.pick_up_address}</Typography>
             <ArrowRightAltIcon sx={{ color: 'text.secondary' }} fontSize="small" />
             <Typography sx={{ fontWeight: 600 }}>{trip.drop_off_address}</Typography>
@@ -96,7 +97,8 @@ function TripRow({
                 {formatDate(trip.date)} · {formatTime(trip.time)}
               </Typography>
             </Box>
-            <Chip size="small" variant="outlined" label={formatDistance(trip.distance)} />
+            <Typography variant="body2">{formatDistance(trip.distance)}</Typography>
+            {trip.duration && <Typography variant="body2">{trip.duration}</Typography>}
           </Stack>
         </Box>
 
@@ -116,6 +118,53 @@ function TripRow({
           </Button>
         </Stack>
       </Stack>
+
+      {/* Actuals — what happened on the ground (driver-recorded, read-only).
+          Each of the four fields gets its own slot. */}
+      <Box
+        sx={{
+          mt: 1.5,
+          p: { xs: 1.5, sm: 2 },
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'baseline', gap: 1, mb: 1, flexWrap: 'wrap' }}
+        >
+          <Typography variant="overline" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+            What happened
+          </Typography>
+          {noActuals && (
+            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+              Awaiting driver record
+            </Typography>
+          )}
+        </Stack>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Field label="Actual pickup" value={trip.actual_pick_up_address} />
+          </Grid>
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Field
+              label="Actual pickup time"
+              value={trip.actual_pick_up_time ? formatTime(trip.actual_pick_up_time) : null}
+            />
+          </Grid>
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Field label="Actual drop-off" value={trip.actual_drop_off_address} />
+          </Grid>
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Field
+              label="Actual drop-off time"
+              value={trip.actual_drop_off_time ? formatTime(trip.actual_drop_off_time) : null}
+            />
+          </Grid>
+        </Grid>
+      </Box>
     </Box>
   );
 }

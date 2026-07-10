@@ -1,5 +1,6 @@
 // Payer-portal API. Every call returns parsed types; components never touch axios.
 
+import { AxiosError } from 'axios';
 import { api } from './client';
 import type {
   BookingCreatedResponse,
@@ -7,6 +8,7 @@ import type {
   BookingListItem,
   InvoiceDetail,
   InvoiceListItem,
+  Paginated,
   Quote,
   QuoteRequest,
   BookingRequest,
@@ -20,6 +22,42 @@ export interface TripFilters {
   date?: string; // exact YYYY-MM-DD
   from?: string;
   to?: string;
+}
+
+export interface PageParams {
+  page?: number; // 1-based; server default 1
+  page_size?: number; // server default 50, capped at 200
+}
+
+function pageParams(p: PageParams): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (p.page) out.page = p.page;
+  if (p.page_size) out.page_size = p.page_size;
+  return out;
+}
+
+// GET a paginated list. A request past the last page returns 404
+// {"detail":"Invalid page."} — the API's way of saying "no more rows". We treat
+// that as an empty page (the caller clamps back to the last valid page), and let
+// any other 404 shape surface as a real error.
+async function fetchPage<T>(
+  url: string,
+  params: Record<string, string | number>,
+): Promise<Paginated<T>> {
+  try {
+    const { data } = await api.get<Paginated<T>>(url, {
+      params: Object.keys(params).length ? params : undefined,
+    });
+    return data;
+  } catch (err) {
+    if (err instanceof AxiosError && err.response?.status === 404) {
+      const detail = (err.response.data as { detail?: string } | undefined)?.detail;
+      if (!detail || /invalid page/i.test(detail)) {
+        return { count: 0, next: null, previous: null, results: [] };
+      }
+    }
+    throw err;
+  }
 }
 
 export async function getServices(payerUuid?: string): Promise<ServicesResponse> {
@@ -39,9 +77,8 @@ export async function createBooking(body: BookingRequest): Promise<BookingCreate
   return data;
 }
 
-export async function getBookings(): Promise<BookingListItem[]> {
-  const { data } = await api.get<BookingListItem[]>('/api/payer/bookings/');
-  return data;
+export async function getBookings(params: PageParams = {}): Promise<Paginated<BookingListItem>> {
+  return fetchPage<BookingListItem>('/api/payer/bookings/', pageParams(params));
 }
 
 export async function getBooking(ref: string): Promise<BookingDetail> {
@@ -57,15 +94,17 @@ export async function addTripToBooking(ref: string, body: TripInput): Promise<Tr
   return data;
 }
 
-export async function getTrips(filters: TripFilters = {}): Promise<Trip[]> {
-  const params: Record<string, string> = {};
+export async function getTrips(
+  filters: TripFilters = {},
+  page: PageParams = {},
+): Promise<Paginated<Trip>> {
+  const params: Record<string, string | number> = {};
   if (filters.date) params.date = filters.date;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
-  const { data } = await api.get<Trip[]>('/api/payer/trips/', {
-    params: Object.keys(params).length ? params : undefined,
-  });
-  return data;
+  if (page.page) params.page = page.page;
+  if (page.page_size) params.page_size = page.page_size;
+  return fetchPage<Trip>('/api/payer/trips/', params);
 }
 
 export async function getTrip(uuid: string): Promise<Trip> {
@@ -82,9 +121,8 @@ export async function cancelTrip(uuid: string): Promise<void> {
   await api.delete(`/api/payer/trips/${uuid}/`);
 }
 
-export async function getInvoices(): Promise<InvoiceListItem[]> {
-  const { data } = await api.get<InvoiceListItem[]>('/api/payer/invoices/');
-  return data;
+export async function getInvoices(params: PageParams = {}): Promise<Paginated<InvoiceListItem>> {
+  return fetchPage<InvoiceListItem>('/api/payer/invoices/', pageParams(params));
 }
 
 export async function getInvoice(uuid: string): Promise<InvoiceDetail> {

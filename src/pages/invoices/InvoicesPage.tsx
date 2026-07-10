@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
-import type { GridColDef } from '@mui/x-data-grid';
+import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 
 import { PageHeader } from '../../components/PageHeader';
 import { DataTable } from '../../components/DataTable';
@@ -13,7 +13,25 @@ import { MONO } from '../../theme';
 import type { InvoiceListItem } from '../../api/types';
 
 export function InvoicesPage() {
-  const { data, isLoading, isError, error, refetch } = useInvoices();
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 50,
+  });
+  const { data, isLoading, isFetching, isError, error, refetch } = useInvoices({
+    page: paginationModel.page + 1, // grid is 0-based, API is 1-based
+    page_size: paginationModel.pageSize,
+  });
+  const rows = data?.results;
+  const rowCount = data?.count ?? 0;
+
+  // If the current page falls past the end (e.g. rows removed), step back.
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(0, Math.ceil(data.count / paginationModel.pageSize) - 1);
+    if (paginationModel.page > lastPage) {
+      setPaginationModel((m) => ({ ...m, page: lastPage }));
+    }
+  }, [data, paginationModel.page, paginationModel.pageSize]);
 
   const columns = useMemo<GridColDef<InvoiceListItem>[]>(
     () => [
@@ -78,12 +96,16 @@ export function InvoicesPage() {
       <PageHeader title="Invoices" subtitle="Invoices billed to your facility. Read-only." />
       <DataTable<InvoiceListItem>
         aria-label="Invoices"
-        rows={data}
+        rows={rows}
         columns={columns}
         getRowId={(row) => row.uuid}
-        loading={isLoading}
+        loading={isLoading || isFetching}
         error={isError ? error : undefined}
         onRetry={refetch}
+        paginationMode="server"
+        rowCount={rowCount}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
         initialState={{ sorting: { sortModel: [{ field: 'invoice_date', sort: 'desc' }] } }}
         empty={{
           title: 'No invoices yet',
