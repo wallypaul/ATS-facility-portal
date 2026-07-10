@@ -22,7 +22,7 @@ import { useToast } from '../../components/ToastProvider';
 import { useTrips, useCancelTrip } from '../../query/hooks';
 import type { TripFilters } from '../../api/payer';
 import { parseApiError } from '../../utils/errors';
-import { formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
+import { canEditTrip, formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
 import { API_DATE } from '../../utils/validation';
 import { MONO } from '../../theme';
 import type { Trip } from '../../api/types';
@@ -147,21 +147,25 @@ export function TripsPage() {
         type: 'actions',
         headerName: '',
         width: 96,
-        getActions: (p) => [
-          <GridActionsCellItem
-            key="edit"
-            icon={<EditOutlinedIcon />}
-            label="Edit"
-            onClick={() => setEditing(p.row)}
-          />,
-          <GridActionsCellItem
-            key="cancel"
-            icon={<DeleteOutlineIcon />}
-            label="Cancel"
-            onClick={() => setConfirmCancel(p.row)}
-            showInMenu={false}
-          />,
-        ],
+        getActions: (p) => {
+          const editable = canEditTrip(p.row);
+          return [
+            <GridActionsCellItem
+              key="edit"
+              icon={<EditOutlinedIcon />}
+              label={editable ? 'Edit' : 'Locked — pickup already recorded'}
+              disabled={!editable}
+              onClick={() => setEditing(p.row)}
+            />,
+            <GridActionsCellItem
+              key="cancel"
+              icon={<DeleteOutlineIcon />}
+              label="Cancel"
+              onClick={() => setConfirmCancel(p.row)}
+              showInMenu={false}
+            />,
+          ];
+        },
       },
     ],
     [],

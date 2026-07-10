@@ -55,3 +55,12 @@ export function tripStatus(trip: {
   if (trip.actual_pick_up_time) return 'in progress';
   return 'scheduled';
 }
+
+// Once the driver has recorded a pickup (address or time), the trip is under way,
+// so a payer can no longer edit its planned logistics.
+export function canEditTrip(trip: {
+  actual_pick_up_address: string | null;
+  actual_pick_up_time: string | null;
+}): boolean {
+  return !trip.actual_pick_up_address && !trip.actual_pick_up_time;
+}
