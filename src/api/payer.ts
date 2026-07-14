@@ -129,3 +129,14 @@ export async function getInvoice(uuid: string): Promise<InvoiceDetail> {
   const { data } = await api.get<InvoiceDetail>(`/api/payer/invoices/${uuid}/`);
   return data;
 }
+
+// Pay a SENT invoice online. `source_id` is the Square card nonce (`cnon:…`)
+// tokenized in the browser — the raw card never reaches us. The server charges
+// the current outstanding balance; no client amount is sent. Returns the updated
+// invoice (200), or throws 400 (not payable) / 402 (card declined) / 404.
+export async function payInvoice(uuid: string, sourceId: string): Promise<InvoiceDetail> {
+  const { data } = await api.post<InvoiceDetail>(`/api/payer/invoices/${uuid}/pay/`, {
+    source_id: sourceId,
+  });
+  return data;
+}

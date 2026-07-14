@@ -16,6 +16,7 @@ import {
   getQuote,
   getServices,
   getTrips,
+  payInvoice,
   type PageParams,
   type TripFilters,
 } from '../api/payer';
@@ -24,6 +25,7 @@ import { queryKeys } from './keys';
 import type {
   BookingDetail,
   BookingRequest,
+  InvoiceDetail,
   Paginated,
   Quote,
   QuoteRequest,
@@ -79,6 +81,20 @@ export function useInvoice(uuid: string) {
     queryKey: queryKeys.invoice(uuid),
     queryFn: () => getInvoice(uuid),
     enabled: Boolean(uuid),
+  });
+}
+
+// Pay a SENT invoice. On success the server returns the updated invoice; write
+// it straight into the detail cache (new amount_paid / status) and refresh the
+// list so its balances/status stay honest.
+export function usePayInvoice(uuid: string) {
+  const qc = useQueryClient();
+  return useMutation<InvoiceDetail, unknown, string>({
+    mutationFn: (sourceId) => payInvoice(uuid, sourceId),
+    onSuccess: (updated) => {
+      qc.setQueryData(queryKeys.invoice(uuid), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.invoices() });
+    },
   });
 }
 

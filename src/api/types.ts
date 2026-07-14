@@ -137,9 +137,18 @@ export interface InvoiceLine {
   trip_id: number | null;
 }
 
+// Client-safe Square Web Payments config. `null` on the invoice when the payer
+// has no Square account configured -> no online-pay affordance is shown.
+export interface SquareConfig {
+  application_id: string;
+  location_id: string;
+  environment: 'sandbox' | 'production' | (string & {});
+}
+
 export interface InvoiceDetail extends InvoiceListItem {
   notes: string | null;
   lines: InvoiceLine[];
+  square: SquareConfig | null;
 }
 
 // --- Request payloads ---

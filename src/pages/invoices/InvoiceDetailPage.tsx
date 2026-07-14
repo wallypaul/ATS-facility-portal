@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
@@ -14,6 +16,7 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 
 import { PageHeader } from '../../components/PageHeader';
 import { StatusChip } from '../../components/StatusChip';
@@ -24,6 +27,7 @@ import { useInvoice } from '../../query/hooks';
 import { parseApiError } from '../../utils/errors';
 import { formatDate } from '../../utils/format';
 import { MONO } from '../../theme';
+import { PayPanel } from './PayPanel';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -38,9 +42,57 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// Shown in place of the pay panel right after a successful charge. Reads the
+// remaining balance live so a rare partial charge still reports honestly.
+function PaidConfirmation({ charged, balance }: { charged: number; balance: number }) {
+  const settled = balance <= 0;
+  return (
+    <Card component="section" sx={{ p: { xs: 2.5, sm: 3 } }}>
+      <Stack direction="row" sx={{ gap: 2, alignItems: 'center' }}>
+        <Box
+          aria-hidden
+          sx={{
+            display: 'grid',
+            placeItems: 'center',
+            flexShrink: 0,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            bgcolor: 'success.main',
+            color: 'success.contrastText',
+            '& svg': { fontSize: 30 },
+          }}
+        >
+          <CheckCircleOutlineIcon />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h3">Payment received</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+            Thank you — your payment of <Money value={charged} emphasis /> was processed.
+          </Typography>
+        </Box>
+      </Stack>
+      <Divider sx={{ my: 2 }} />
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {settled ? 'This invoice is paid in full.' : 'Remaining balance'}
+        </Typography>
+        <Money
+          value={balance}
+          emphasis
+          sx={{ fontSize: '1.15rem', color: settled ? 'success.main' : 'secondary.main' }}
+        />
+      </Stack>
+    </Card>
+  );
+}
+
 export function InvoiceDetailPage() {
   const { uuid = '' } = useParams();
   const { data, isLoading, isError, error, refetch } = useInvoice(uuid);
+  // Set to the charged amount once a payment succeeds, so the pay panel gives way
+  // to a confirmation for the rest of this visit.
+  const [paidAmount, setPaidAmount] = useState<number | null>(null);
 
   const back = (
     <Link
@@ -96,7 +148,7 @@ export function InvoiceDetailPage() {
       {back}
       <PageHeader
         title={<Ref value={data.invoice_number} label="invoice number" />}
-        subtitle="Read-only invoice detail"
+        subtitle={data.payer ? `Billed to ${data.payer}` : 'Invoice detail'}
         action={<StatusChip status={data.status} />}
       />
 
@@ -106,13 +158,8 @@ export function InvoiceDetailPage() {
             <Field label="Issued" value={formatDate(data.invoice_date)} />
           </Grid>
           <Grid size={{ xs: 6, sm: 3 }}>
-            <Field label="Due" value={formatDate(data.due_date)} />
+            <Field label="Due" value={data.due_date ? formatDate(data.due_date) : 'On receipt'} />
           </Grid>
-          {data.payer && (
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <Field label="Payer" value={data.payer} />
-            </Grid>
-          )}
         </Grid>
 
         <Divider sx={{ my: 2 }} />
@@ -149,6 +196,18 @@ export function InvoiceDetailPage() {
           </>
         )}
       </Card>
+
+      {/* Online pay — only for a SENT invoice with an outstanding balance and a
+          Square config. After a successful charge, the confirmation takes over. */}
+      {data.square && (paidAmount !== null || (data.status === 'SENT' && balance > 0)) && (
+        <Box sx={{ mb: 2 }}>
+          {paidAmount !== null ? (
+            <PaidConfirmation charged={paidAmount} balance={balance} />
+          ) : (
+            <PayPanel invoice={data} amount={balance} onPaid={setPaidAmount} />
+          )}
+        </Box>
+      )}
 
       <Card sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="h3" sx={{ mb: 1.5 }}>
