@@ -140,3 +140,25 @@ export async function payInvoice(uuid: string, sourceId: string): Promise<Invoic
   });
   return data;
 }
+
+// Download the invoice as a PDF/Excel. Fetches the file as an authed blob and
+// triggers a browser save — a plain <a href> can't carry the Bearer token.
+// (`fmt`, not `format`: DRF reserves `format` for content negotiation.)
+export async function downloadInvoice(
+  uuid: string,
+  invoiceNumber: string,
+  fmt: 'pdf' | 'excel' = 'pdf',
+): Promise<void> {
+  const { data } = await api.get<Blob>(`/api/payer/invoices/${uuid}/download/`, {
+    params: { fmt },
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${invoiceNumber || 'invoice'}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

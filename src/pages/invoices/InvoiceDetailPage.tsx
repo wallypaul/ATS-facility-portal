@@ -6,6 +6,9 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
@@ -17,6 +20,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
 import { PageHeader } from '../../components/PageHeader';
 import { StatusChip } from '../../components/StatusChip';
@@ -24,6 +28,8 @@ import { Ref } from '../../components/Ref';
 import { Money } from '../../components/Money';
 import { ErrorState, EmptyState } from '../../components/StateViews';
 import { useInvoice } from '../../query/hooks';
+import { downloadInvoice } from '../../api/payer';
+import type { InvoiceBiller } from '../../api/types';
 import { parseApiError } from '../../utils/errors';
 import { formatDate } from '../../utils/format';
 import { MONO } from '../../theme';
@@ -38,6 +44,34 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <Typography variant="body2" sx={{ fontWeight: 500 }}>
         {value || '—'}
       </Typography>
+    </Box>
+  );
+}
+
+// "Billed by" — the biller attached to the invoice (matches the PDF header).
+function BilledBy({ biller }: { biller: InvoiceBiller }) {
+  const cityLine = [biller.city, biller.state].filter(Boolean).join(', ');
+  const lines = [
+    biller.line1,
+    biller.line2,
+    [cityLine, biller.postal_code].filter(Boolean).join(' '),
+    biller.country,
+    biller.phone,
+    biller.email,
+  ].filter(Boolean);
+  return (
+    <Box>
+      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+        Billed by
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {biller.name}
+      </Typography>
+      {lines.map((line) => (
+        <Typography key={line} variant="body2" sx={{ color: 'text.secondary' }}>
+          {line}
+        </Typography>
+      ))}
     </Box>
   );
 }
@@ -93,6 +127,8 @@ export function InvoiceDetailPage() {
   // Set to the charged amount once a payment succeeds, so the pay panel gives way
   // to a confirmation for the rest of this visit.
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
+  const [dlAnchor, setDlAnchor] = useState<HTMLElement | null>(null);
+  const [dlError, setDlError] = useState(false);
 
   const back = (
     <Link
@@ -143,16 +179,54 @@ export function InvoiceDetailPage() {
 
   const balance = Number(data.total_amount) - Number(data.amount_paid);
 
+  const doDownload = async (fmt: 'pdf' | 'excel') => {
+    setDlAnchor(null);
+    setDlError(false);
+    try {
+      await downloadInvoice(uuid, data.invoice_number, fmt);
+    } catch {
+      setDlError(true);
+    }
+  };
+
   return (
     <Box sx={{ pb: 4 }}>
       {back}
       <PageHeader
         title={<Ref value={data.invoice_number} label="invoice number" />}
         subtitle={data.payer ? `Billed to ${data.payer}` : 'Invoice detail'}
-        action={<StatusChip status={data.status} />}
+        action={
+          <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+            <StatusChip status={data.status} />
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<FileDownloadOutlinedIcon />}
+              onClick={(e) => setDlAnchor(e.currentTarget)}
+            >
+              Download
+            </Button>
+            <Menu anchorEl={dlAnchor} open={!!dlAnchor} onClose={() => setDlAnchor(null)}>
+              <MenuItem onClick={() => doDownload('pdf')}>PDF</MenuItem>
+              <MenuItem onClick={() => doDownload('excel')}>Excel</MenuItem>
+            </Menu>
+          </Stack>
+        }
       />
 
+      {dlError && (
+        <Alert severity="error" onClose={() => setDlError(false)} sx={{ mb: 2 }}>
+          Could not download the invoice. Please try again.
+        </Alert>
+      )}
+
       <Card sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
+        {data.biller && (
+          <>
+            <BilledBy biller={data.biller} />
+            <Divider sx={{ my: 2 }} />
+          </>
+        )}
         <Grid container spacing={2}>
           <Grid size={{ xs: 6, sm: 3 }}>
             <Field label="Issued" value={formatDate(data.invoice_date)} />

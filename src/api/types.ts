@@ -145,8 +145,23 @@ export interface SquareConfig {
   environment: 'sandbox' | 'production' | (string & {});
 }
 
+// Who billed the payer — the biller attached during invoicing. Null when none
+// was attached. Display-only fields (matches the invoice PDF header).
+export interface InvoiceBiller {
+  name: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  phone: string;
+  email: string;
+}
+
 export interface InvoiceDetail extends InvoiceListItem {
   notes: string | null;
+  biller: InvoiceBiller | null;
   lines: InvoiceLine[];
   square: SquareConfig | null;
 }
