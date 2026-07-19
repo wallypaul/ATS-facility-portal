@@ -4,6 +4,20 @@ import react from '@vitejs/plugin-react';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Pre-bundle every @mui/x-date-pickers entrypoint we import together, so they
+  // share ONE copy of the internal LocalizationProvider context. When Vite's dep
+  // optimizer splits these deep imports into separate chunks, each gets its own
+  // context object and pickers throw "Can not find the ... localization context"
+  // even though <LocalizationProvider> is mounted. (Single x-date-pickers@9
+  // installed — this is a bundler split, not a version conflict.)
+  optimizeDeps: {
+    include: [
+      '@mui/x-date-pickers/AdapterDayjs',
+      '@mui/x-date-pickers/LocalizationProvider',
+      '@mui/x-date-pickers/DatePicker',
+      '@mui/x-date-pickers/TimePicker',
+    ],
+  },
   server: {
     port: 3003,
   },

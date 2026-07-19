@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
+import Tooltip from '@mui/material/Tooltip';
 import Skeleton from '@mui/material/Skeleton';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
@@ -26,7 +27,7 @@ import { TripDialog } from '../../components/TripDialog';
 import { useToast } from '../../components/ToastProvider';
 import { useBooking, useCancelTrip, useServices } from '../../query/hooks';
 import { parseApiError } from '../../utils/errors';
-import { formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
+import { canEditTrip, formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
 import type { Passenger, Trip } from '../../api/types';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -70,6 +71,7 @@ function TripRow({ trip, onEdit, onCancel }: { trip: Trip; onEdit: () => void; o
     !trip.actual_pick_up_time &&
     !trip.actual_drop_off_address &&
     !trip.actual_drop_off_time;
+  const editable = canEditTrip(trip);
   return (
     <Box sx={{ py: 2 }}>
       {/* Planned */}
@@ -104,9 +106,20 @@ function TripRow({ trip, onEdit, onCancel }: { trip: Trip; onEdit: () => void; o
 
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
           <Money value={trip.price} emphasis sx={{ fontSize: '1.05rem' }} />
-          <Button size="small" variant="outlined" startIcon={<EditOutlinedIcon />} onClick={onEdit}>
-            Edit
-          </Button>
+          <Tooltip title={editable ? '' : 'Locked — the driver has already recorded pickup'}>
+            {/* span keeps the tooltip working while the button is disabled */}
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<EditOutlinedIcon />}
+                onClick={onEdit}
+                disabled={!editable}
+              >
+                Edit
+              </Button>
+            </span>
+          </Tooltip>
           <Button
             size="small"
             variant="outlined"
@@ -315,6 +328,7 @@ export function BookingDetailPage() {
         mode="add"
         bookingRef={data.ref}
         services={servicesQuery.data?.services ?? []}
+        bookingDate={data.trips[0]?.date ?? null}
       />
 
       {/* Cancel confirm */}

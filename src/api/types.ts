@@ -65,6 +65,8 @@ export interface ServiceData {
   passengers: number;
   companion?: string | number;
   comments?: string;
+  toll?: boolean;
+  weight?: number;
 }
 
 // What a PAYER reads for a trip: the full planned trip + pricing, PLUS the four
@@ -96,6 +98,8 @@ export interface BookingListItem {
   passenger_name: string;
   payer: string | null;
   trips_count: number;
+  first_trip_pickup: string | null;
+  first_trip_dropoff: string | null;
 }
 
 export interface BookingDetail {
@@ -135,11 +139,36 @@ export interface InvoiceLine {
   unit_price: string;
   amount: string;
   trip_id: number | null;
+  booking_ref: string; // '' when the line isn't tied to a booking
+}
+
+// Client-safe Square Web Payments config. `null` on the invoice when the payer
+// has no Square account configured -> no online-pay affordance is shown.
+export interface SquareConfig {
+  application_id: string;
+  location_id: string;
+  environment: 'sandbox' | 'production' | (string & {});
+}
+
+// Who billed the payer — the biller attached during invoicing. Null when none
+// was attached. Display-only fields (matches the invoice PDF header).
+export interface InvoiceBiller {
+  name: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  phone: string;
+  email: string;
 }
 
 export interface InvoiceDetail extends InvoiceListItem {
   notes: string | null;
+  biller: InvoiceBiller | null;
   lines: InvoiceLine[];
+  square: SquareConfig | null;
 }
 
 // --- Request payloads ---
@@ -149,6 +178,8 @@ export interface QuoteRequest {
   origin: string;
   destination: string;
   payer_uuid?: string;
+  toll?: boolean;
+  weight?: number;
 }
 
 export interface TripInput {

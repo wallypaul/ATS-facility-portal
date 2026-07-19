@@ -2,25 +2,73 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Autocomplete from '@mui/material/Autocomplete';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import AddIcon from '@mui/icons-material/Add';
+import dayjs, { type Dayjs } from 'dayjs';
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 
 import { PageHeader } from '../../components/PageHeader';
 import { DataTable } from '../../components/DataTable';
 import { StatusChip } from '../../components/StatusChip';
 import { Ref } from '../../components/Ref';
+import { FilterBar } from '../../components/FilterBar';
 import { useBookings } from '../../query/hooks';
-import { formatDateTime } from '../../utils/format';
+import { formatDateTime, truncate } from '../../utils/format';
+import { useDebouncedValue } from '../../utils/useDebouncedValue';
+import { API_DATE } from '../../utils/validation';
 import { MONO } from '../../theme';
+import type { BookingFilters } from '../../api/payer';
 import type { BookingListItem } from '../../api/types';
+
+// Non-exhaustive suggestions — the field is freeSolo, so any status text can
+// be typed; there's no canonical status enum available to validate against.
+const STATUS_SUGGESTIONS = ['received', 'accepted', 'confirmed', 'cancelled'];
+const PAYMENT_STATUS_SUGGESTIONS = ['pending', 'partial', 'paid', 'unpaid'];
 
 export function BookingsPage() {
   const navigate = useNavigate();
+
+  const [date, setDate] = useState<Dayjs>(() => dayjs());
+  const [bookingIdInput, setBookingIdInput] = useState('');
+  const [patientNameInput, setPatientNameInput] = useState('');
+  const [status, setStatus] = useState<string[]>([]);
+  const [paymentStatus, setPaymentStatus] = useState<string[]>([]);
+  const bookingId = useDebouncedValue(bookingIdInput);
+  const patientName = useDebouncedValue(patientNameInput);
+
+  const filters = useMemo<BookingFilters>(() => {
+    const f: BookingFilters = { date: date.format(API_DATE) };
+    if (bookingId) f.booking_id = bookingId;
+    if (patientName) f.patient_name = patientName;
+    if (status.length) f.status = status;
+    if (paymentStatus.length) f.payment_status = paymentStatus;
+    return f;
+  }, [date, bookingId, patientName, status, paymentStatus]);
+
+  const hasClearableFilters = Boolean(
+    bookingIdInput || patientNameInput || status.length || paymentStatus.length || !date.isSame(dayjs(), 'day'),
+  );
+  const clearFilters = () => {
+    setDate(dayjs());
+    setBookingIdInput('');
+    setPatientNameInput('');
+    setStatus([]);
+    setPaymentStatus([]);
+  };
+
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 50,
   });
-  const { data, isLoading, isFetching, isError, error, refetch } = useBookings({
+
+  // A new filter set is a new result set — jump back to the first page.
+  useEffect(() => {
+    setPaginationModel((m) => ({ ...m, page: 0 }));
+  }, [filters]);
+
+  const { data, isLoading, isFetching, isError, error, refetch } = useBookings(filters, {
     page: paginationModel.page + 1, // grid is 0-based, API is 1-based
     page_size: paginationModel.pageSize,
   });
@@ -55,6 +103,20 @@ export function BookingsPage() {
         renderCell: (p) => <Ref value={p.row.ref} to={`/bookings/${encodeURIComponent(p.row.ref)}`} label="booking ref" />,
       },
       { field: 'passenger_name', headerName: 'Patient', flex: 1, minWidth: 160 },
+      {
+        field: 'first_trip_pickup',
+        headerName: 'Pickup',
+        width: 100,
+        sortable: false,
+        renderCell: (p) => <span title={p.row.first_trip_pickup ?? ''}>{truncate(p.row.first_trip_pickup)}</span>,
+      },
+      {
+        field: 'first_trip_dropoff',
+        headerName: 'Drop-off',
+        width: 100,
+        sortable: false,
+        renderCell: (p) => <span title={p.row.first_trip_dropoff ?? ''}>{truncate(p.row.first_trip_dropoff)}</span>,
+      },
       {
         field: 'status',
         headerName: 'Status',
@@ -107,6 +169,46 @@ export function BookingsPage() {
           </Button>
         }
       />
+      <FilterBar onClear={clearFilters} hasClearableFilters={hasClearableFilters}>
+        <DatePicker
+          label="Date"
+          value={date}
+          onChange={(v) => v && setDate(v)}
+          slotProps={{ textField: { size: 'small', required: true, sx: { width: 170 } } }}
+        />
+        <TextField
+          label="Booking ID"
+          size="small"
+          value={bookingIdInput}
+          onChange={(e) => setBookingIdInput(e.target.value)}
+          sx={{ width: 170 }}
+        />
+        <TextField
+          label="Patient name"
+          size="small"
+          value={patientNameInput}
+          onChange={(e) => setPatientNameInput(e.target.value)}
+          sx={{ width: 190 }}
+        />
+        <Autocomplete
+          multiple
+          freeSolo
+          options={STATUS_SUGGESTIONS}
+          value={status}
+          onChange={(_e, v) => setStatus(v)}
+          renderInput={(params) => <TextField {...params} label="Status" size="small" />}
+          sx={{ width: 220 }}
+        />
+        <Autocomplete
+          multiple
+          freeSolo
+          options={PAYMENT_STATUS_SUGGESTIONS}
+          value={paymentStatus}
+          onChange={(_e, v) => setPaymentStatus(v)}
+          renderInput={(params) => <TextField {...params} label="Payment status" size="small" />}
+          sx={{ width: 220 }}
+        />
+      </FilterBar>
       <DataTable<BookingListItem>
         aria-label="Bookings"
         rows={rows}

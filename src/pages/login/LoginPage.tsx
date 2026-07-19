@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Navigate, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { Link as RouterLink, Navigate, useLocation, useNavigate, type Location } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
+import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
@@ -154,6 +155,14 @@ export function LoginPage() {
                 },
               }}
             />
+            <Link
+              component={RouterLink}
+              to="/forgot-password"
+              variant="body2"
+              sx={{ alignSelf: 'flex-end', mt: -0.5 }}
+            >
+              Forgot password?
+            </Link>
             <Button
               type="submit"
               variant="contained"

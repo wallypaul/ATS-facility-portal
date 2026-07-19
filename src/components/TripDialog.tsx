@@ -20,14 +20,14 @@ import { Money } from './Money';
 import { useToast } from './ToastProvider';
 import { useAddTrip, useEditTrip } from '../query/hooks';
 import { applyServerFieldErrors } from '../utils/form';
-import { API_DATE, API_TIME, timeSchema, tripDateSchema } from '../utils/validation';
-import { formatDistance } from '../utils/format';
+import { API_DATE, API_TIME, optionalDate, timeSchema, tripDateSchema } from '../utils/validation';
+import { formatDate, formatDistance } from '../utils/format';
 import type { ServiceLevel, Trip } from '../api/types';
 
 const schema = z.object({
   pick_up_address: z.string().trim().min(1, 'Pickup address is required'),
   drop_off_address: z.string().trim().min(1, 'Drop-off address is required'),
-  date: tripDateSchema,
+  date: optionalDate,
   time: timeSchema,
   service_level: z.string().optional(),
 });
@@ -43,22 +43,28 @@ interface TripDialogProps {
   bookingRef: string;
   trip?: Trip; // required for edit
   services?: ServiceLevel[]; // for add-mode service_level select
+  bookingDate?: string | null; // add-mode: the booking's existing trip date, if it has any trips
 }
 
 // A payer edits logistics only (pickup/drop-off/date/time); price/distance/
 // duration are server-set and shown read-only. Edit pre-fills from the trip's
 // planned fields, which the payer read now returns.
-export function TripDialog({ open, onClose, mode, bookingRef, trip, services = [] }: TripDialogProps) {
+export function TripDialog({ open, onClose, mode, bookingRef, trip, services = [], bookingDate = null }: TripDialogProps) {
   const toast = useToast();
   const editTrip = useEditTrip();
   const addTrip = useAddTrip(bookingRef);
   const [formError, setFormError] = useState<string[]>([]);
 
+  // A booking's date is fixed once it has any trips; only a booking with zero
+  // trips (everything on it was cancelled) still needs a date picker here.
+  const needsDatePicker = mode === 'add' && !bookingDate;
+  const lockedDate = mode === 'edit' ? trip?.date ?? null : bookingDate;
+
   const defaults = useMemo<TripFormValues>(
     () => ({
       pick_up_address: trip?.pick_up_address ?? '',
       drop_off_address: trip?.drop_off_address ?? '',
-      date: (trip?.date ? dayjs(trip.date) : null) as never,
+      date: null,
       time: (trip?.time ? dayjs(`2000-01-01T${trip.time}`) : null) as never,
       service_level: services[0]?.code ?? '',
     }),
@@ -82,19 +88,28 @@ export function TripDialog({ open, onClose, mode, bookingRef, trip, services = [
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError([]);
-    const base = {
+    const logistics = {
       pick_up_address: values.pick_up_address.trim(),
       drop_off_address: values.drop_off_address.trim(),
-      date: dayjs(values.date).format(API_DATE),
       time: dayjs(values.time).format(API_TIME),
     };
     try {
       if (mode === 'edit' && trip) {
-        await editTrip.mutateAsync({ uuid: trip.uuid, input: base });
+        await editTrip.mutateAsync({ uuid: trip.uuid, input: logistics });
         toast.success('Trip updated');
       } else {
+        let date = bookingDate ?? '';
+        if (needsDatePicker) {
+          const result = tripDateSchema.safeParse(values.date);
+          if (!result.success) {
+            setError('date', { type: 'validate', message: result.error.issues[0]?.message ?? 'Date is required' });
+            return;
+          }
+          date = dayjs(values.date).format(API_DATE);
+        }
         await addTrip.mutateAsync({
-          ...base,
+          ...logistics,
+          date,
           service_level: values.service_level || undefined,
         });
         toast.success('Trip added');
@@ -132,7 +147,21 @@ export function TripDialog({ open, onClose, mode, bookingRef, trip, services = [
             <FormTextField control={control} name="drop_off_address" label="Drop-off address" />
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <FormDatePicker control={control} name="date" label="Date" disablePast />
+              {needsDatePicker ? (
+                <FormDatePicker control={control} name="date" label="Date" disablePast />
+              ) : (
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                    Date
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {formatDate(lockedDate)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    Set by the booking's date — not editable here
+                  </Typography>
+                </Box>
+              )}
               <FormTimePicker control={control} name="time" label="Time" />
             </Stack>
 

@@ -16,6 +16,9 @@ import {
   getQuote,
   getServices,
   getTrips,
+  payInvoice,
+  type BookingFilters,
+  type InvoiceFilters,
   type PageParams,
   type TripFilters,
 } from '../api/payer';
@@ -24,6 +27,7 @@ import { queryKeys } from './keys';
 import type {
   BookingDetail,
   BookingRequest,
+  InvoiceDetail,
   Paginated,
   Quote,
   QuoteRequest,
@@ -42,10 +46,10 @@ export function useServices(payerUuid?: string) {
   });
 }
 
-export function useBookings(params: PageParams) {
+export function useBookings(filters: BookingFilters, params: PageParams) {
   return useQuery({
-    queryKey: queryKeys.bookings(params),
-    queryFn: () => getBookings(params),
+    queryKey: queryKeys.bookings(filters, params),
+    queryFn: () => getBookings(filters, params),
     placeholderData: (prev) => prev, // keep the current page visible while the next loads
   });
 }
@@ -66,10 +70,10 @@ export function useTrips(filters: TripFilters, params: PageParams) {
   });
 }
 
-export function useInvoices(params: PageParams) {
+export function useInvoices(filters: InvoiceFilters, params: PageParams) {
   return useQuery({
-    queryKey: queryKeys.invoices(params),
-    queryFn: () => getInvoices(params),
+    queryKey: queryKeys.invoices(filters, params),
+    queryFn: () => getInvoices(filters, params),
     placeholderData: (prev) => prev, // keep the current page visible while the next loads
   });
 }
@@ -79,6 +83,20 @@ export function useInvoice(uuid: string) {
     queryKey: queryKeys.invoice(uuid),
     queryFn: () => getInvoice(uuid),
     enabled: Boolean(uuid),
+  });
+}
+
+// Pay a SENT invoice. On success the server returns the updated invoice; write
+// it straight into the detail cache (new amount_paid / status) and refresh the
+// list so its balances/status stay honest.
+export function usePayInvoice(uuid: string) {
+  const qc = useQueryClient();
+  return useMutation<InvoiceDetail, unknown, string>({
+    mutationFn: (sourceId) => payInvoice(uuid, sourceId),
+    onSuccess: (updated) => {
+      qc.setQueryData(queryKeys.invoice(uuid), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.invoices() });
+    },
   });
 }
 

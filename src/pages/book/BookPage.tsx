@@ -16,14 +16,16 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import { useForm, useFieldArray, type Control } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 
 import { PageHeader } from '../../components/PageHeader';
 import { FormTextField } from '../../components/form/FormTextField';
+import { FormAddressField } from '../../components/form/FormAddressField';
 import { FormSelect } from '../../components/form/FormSelect';
+import { FormSwitch } from '../../components/form/FormSwitch';
 import { FormDatePicker } from '../../components/form/FormDatePicker';
 import { FormTimePicker } from '../../components/form/FormTimePicker';
 import { Money } from '../../components/Money';
@@ -32,14 +34,13 @@ import { useToast } from '../../components/ToastProvider';
 import { useServices, useBook, useQuote } from '../../query/hooks';
 import { applyServerFieldErrors } from '../../utils/form';
 import { API_DATE, API_TIME, dobSchema, timeSchema, tripDateSchema } from '../../utils/validation';
-import { formatDistance } from '../../utils/format';
+import { formatDate, formatDistance } from '../../utils/format';
 import { glassSx } from '../../theme';
 import type { Quote, ServiceLevel } from '../../api/types';
 
 const legSchema = z.object({
   pick_up_address: z.string().trim().min(1, 'Pickup address is required'),
   drop_off_address: z.string().trim().min(1, 'Drop-off address is required'),
-  date: tripDateSchema,
   time: timeSchema,
   service_level: z.string().min(1, 'Service level is required'),
 });
@@ -53,6 +54,9 @@ const schema = z.object({
     dob: dobSchema,
   }),
   passengers: z.coerce.number().int().min(1, 'At least 1').max(20, 'Too many'),
+  toll: z.boolean().default(false),
+  weight: z.coerce.number().min(0).optional(),
+  date: tripDateSchema,
   tripsData: z.array(legSchema).min(1, 'Add at least one leg'),
 });
 
@@ -61,7 +65,6 @@ type BookValues = z.infer<typeof schema>;
 const emptyLeg = (serviceLevel: string) => ({
   pick_up_address: '',
   drop_off_address: '',
-  date: null as never,
   time: null as never,
   service_level: serviceLevel,
 });
@@ -85,6 +88,9 @@ export function BookPage() {
     defaultValues: {
       passenger: { firstName: '', lastName: '', email: '', phone_1: '', dob: null as never },
       passengers: 1,
+      toll: false,
+      weight: undefined,
+      date: null as never,
       tripsData: [emptyLeg('')],
     },
   });
@@ -110,6 +116,8 @@ export function BookPage() {
         service_level: leg.service_level,
         origin: leg.pick_up_address,
         destination: leg.drop_off_address,
+        toll: getValues('toll'),
+        weight: getValues('weight'),
       });
       setQuotes((q) => ({ ...q, [fieldId]: result }));
     } catch (err) {
@@ -135,11 +143,13 @@ export function BookPage() {
         // the portal flow uses "2" (Ambulatory) as in the documented request.
         service: '2',
         passengers: values.passengers,
+        toll: values.toll,
+        weight: values.weight,
       },
       tripsData: values.tripsData.map((l) => ({
         pick_up_address: l.pick_up_address.trim(),
         drop_off_address: l.drop_off_address.trim(),
-        date: dayjs(l.date).format(API_DATE),
+        date: dayjs(values.date).format(API_DATE),
         time: dayjs(l.time).format(API_TIME),
         service_level: l.service_level,
       })),
@@ -157,10 +167,10 @@ export function BookPage() {
         'passenger.phone_1',
         'passenger.dob',
         'passengers',
+        'date',
         ...values.tripsData.flatMap((_, i) => [
           `tripsData.${i}.pick_up_address`,
           `tripsData.${i}.drop_off_address`,
-          `tripsData.${i}.date`,
           `tripsData.${i}.time`,
           `tripsData.${i}.service_level`,
         ]),
@@ -246,6 +256,18 @@ export function BookPage() {
               type="number"
               slotProps={{ htmlInput: { min: 1, max: 20 } }}
             />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormTextField
+              control={control}
+              name="weight"
+              label="Weight"
+              type="number"
+              slotProps={{ htmlInput: { min: 0 } }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormSwitch control={control} name="toll" label="Include toll" />
           </Grid>
         </Grid>
       </Card>
@@ -335,6 +357,7 @@ function LegCard({
   onQuote: () => void;
   onRemove?: () => void;
 }) {
+  const sharedDate = useWatch({ control, name: 'date' }) as Dayjs | null;
   return (
     <Card sx={{ p: { xs: 2, sm: 3 } }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -350,13 +373,27 @@ function LegCard({
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <FormTextField control={control} name={`tripsData.${index}.pick_up_address`} label="Pickup address" />
+          <FormAddressField control={control} name={`tripsData.${index}.pick_up_address`} label="Pickup address" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <FormTextField control={control} name={`tripsData.${index}.drop_off_address`} label="Drop-off address" />
+          <FormAddressField control={control} name={`tripsData.${index}.drop_off_address`} label="Drop-off address" />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <FormDatePicker control={control} name={`tripsData.${index}.date`} label="Date" disablePast />
+          {index === 0 ? (
+            <FormDatePicker control={control} name="date" label="Date" disablePast />
+          ) : (
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                Date
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.5 }}>
+                {sharedDate ? formatDate(sharedDate.format(API_DATE)) : '—'}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {sharedDate ? 'Same day as Leg 1' : 'Select a date on Leg 1 first'}
+              </Typography>
+            </Box>
+          )}
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <FormTimePicker control={control} name={`tripsData.${index}.time`} label="Time" />
