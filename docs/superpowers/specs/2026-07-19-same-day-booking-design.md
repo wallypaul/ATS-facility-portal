@@ -44,10 +44,15 @@ editable field in both modes.
   read-only-field box style (the one already used for price/distance in this dialog).
   Submitted payload's date is `trip.date`, unchanged from before.
 - **Add mode:** needs the booking's already-established date. `BookingDetailPage` passes a
-  new `bookingDate` prop to `<TripDialog>` when opening it in `add` mode, derived from any
-  existing trip on the booking (`data.trips[0].date` — a booking always has at least one
-  trip). Displayed read-only the same way as edit mode. Submitted payload's date is
-  `bookingDate`.
+  new `bookingDate` prop to `<TripDialog>`, derived from any existing trip on the booking
+  (`data.trips[0]?.date ?? null`). When present, displayed read-only the same way as edit
+  mode, and the submitted payload's date is `bookingDate`.
+
+  **Edge case:** a booking can have zero active trips (all cancelled — `BookingDetailPage`
+  already renders an empty state with its own "Add trip" affordance for this). There's no
+  established date to lock to, so when `bookingDate` is absent, Add mode falls back to an
+  editable date picker (`tripDateSchema`: today-or-later), exactly like today's behavior.
+  The lock only applies once the booking has at least one trip to anchor to.
 
 ### Error handling
 
@@ -62,7 +67,9 @@ Manual verification (no backend in this repo to integration-test against):
    Leg 1's date, and updates live when Leg 1's date changes.
 2. Book page: remove Leg 1 while a Leg 2+ exists, confirm the new first leg gets the picker
    and keeps the previously-chosen date (not blank).
-3. Existing booking: open "Add trip," confirm the date shown is read-only and matches the
-   booking's existing trips.
+3. Existing booking (≥1 trip): open "Add trip," confirm the date shown is read-only and
+   matches the booking's existing trips.
 4. Existing booking: open "Edit trip," confirm the date is read-only and unchanged after
    saving other fields.
+5. Booking with zero active trips (all cancelled): open "Add trip," confirm the date is an
+   editable picker (today-or-later), same as today's behavior.
