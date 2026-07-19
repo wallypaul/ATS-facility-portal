@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import dayjs, { type Dayjs } from 'dayjs';
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 
 import { PageHeader } from '../../components/PageHeader';
@@ -8,20 +11,46 @@ import { DataTable } from '../../components/DataTable';
 import { StatusChip } from '../../components/StatusChip';
 import { Ref } from '../../components/Ref';
 import { Money } from '../../components/Money';
+import { FilterBar } from '../../components/FilterBar';
 import { useInvoices } from '../../query/hooks';
 import { formatDate } from '../../utils/format';
+import { useDebouncedValue } from '../../utils/useDebouncedValue';
+import { API_DATE } from '../../utils/validation';
 import { MONO } from '../../theme';
+import type { InvoiceFilters } from '../../api/payer';
 import type { InvoiceListItem } from '../../api/types';
 
 // Outstanding balance a payer still owes on an invoice (no server field for it).
 const outstanding = (row: InvoiceListItem) => Number(row.total_amount) - Number(row.amount_paid);
 
 export function InvoicesPage() {
+  const [date, setDate] = useState<Dayjs>(() => dayjs());
+  const [invoiceIdInput, setInvoiceIdInput] = useState('');
+  const invoiceId = useDebouncedValue(invoiceIdInput);
+
+  const filters = useMemo<InvoiceFilters>(() => {
+    const f: InvoiceFilters = { date: date.format(API_DATE) };
+    if (invoiceId) f.invoice_id = invoiceId;
+    return f;
+  }, [date, invoiceId]);
+
+  const hasClearableFilters = Boolean(invoiceIdInput || !date.isSame(dayjs(), 'day'));
+  const clearFilters = () => {
+    setDate(dayjs());
+    setInvoiceIdInput('');
+  };
+
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 50,
   });
-  const { data, isLoading, isFetching, isError, error, refetch } = useInvoices({
+
+  // A new filter set is a new result set — jump back to the first page.
+  useEffect(() => {
+    setPaginationModel((m) => ({ ...m, page: 0 }));
+  }, [filters]);
+
+  const { data, isLoading, isFetching, isError, error, refetch } = useInvoices(filters, {
     page: paginationModel.page + 1, // grid is 0-based, API is 1-based
     page_size: paginationModel.pageSize,
   });
@@ -132,6 +161,21 @@ export function InvoicesPage() {
         title="Invoices"
         subtitle="Invoices billed to your facility. Open one to review line items or pay online."
       />
+      <FilterBar onClear={clearFilters} hasClearableFilters={hasClearableFilters}>
+        <DatePicker
+          label="Date"
+          value={date}
+          onChange={(v) => v && setDate(v)}
+          slotProps={{ textField: { size: 'small', required: true, sx: { width: 170 } } }}
+        />
+        <TextField
+          label="Invoice ID"
+          size="small"
+          value={invoiceIdInput}
+          onChange={(e) => setInvoiceIdInput(e.target.value)}
+          sx={{ width: 190 }}
+        />
+      </FilterBar>
       <DataTable<InvoiceListItem>
         aria-label="Invoices"
         rows={rows}
@@ -146,8 +190,10 @@ export function InvoicesPage() {
         onPaginationModelChange={setPaginationModel}
         initialState={{ sorting: { sortModel: [{ field: 'invoice_date', sort: 'desc' }] } }}
         empty={{
-          title: 'No invoices yet',
-          description: 'When ATS bills your facility, invoices will show up here.',
+          title: hasClearableFilters ? 'No invoices match these filters' : 'No invoices on this date',
+          description: hasClearableFilters
+            ? 'Try a different date or clearing the filters.'
+            : 'When ATS bills your facility, invoices will show up here.',
         }}
       />
     </Box>

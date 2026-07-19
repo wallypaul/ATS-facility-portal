@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { GridActionsCellItem, type GridColDef, type GridPaginationModel } from '@mui/x-data-grid';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import ClearIcon from '@mui/icons-material/Clear';
-import { type Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 
 import { PageHeader } from '../../components/PageHeader';
 import { DataTable } from '../../components/DataTable';
@@ -18,31 +16,51 @@ import { Ref } from '../../components/Ref';
 import { Money } from '../../components/Money';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { TripDialog } from '../../components/TripDialog';
+import { FilterBar } from '../../components/FilterBar';
 import { useToast } from '../../components/ToastProvider';
 import { useTrips, useCancelTrip } from '../../query/hooks';
 import type { TripFilters } from '../../api/payer';
 import { parseApiError } from '../../utils/errors';
 import { canEditTrip, formatDate, formatDistance, formatTime, tripStatus } from '../../utils/format';
+import { useDebouncedValue } from '../../utils/useDebouncedValue';
 import { API_DATE } from '../../utils/validation';
 import { MONO } from '../../theme';
 import type { Trip } from '../../api/types';
 
 export function TripsPage() {
   const toast = useToast();
-  const [from, setFrom] = useState<Dayjs | null>(null);
-  const [to, setTo] = useState<Dayjs | null>(null);
-  const [exact, setExact] = useState<Dayjs | null>(null);
+  const [date, setDate] = useState<Dayjs>(() => dayjs());
+  const [bookingIdInput, setBookingIdInput] = useState('');
+  const [patientNameInput, setPatientNameInput] = useState('');
+  const [pickupInput, setPickupInput] = useState('');
+  const [dropoffInput, setDropoffInput] = useState('');
+  const bookingId = useDebouncedValue(bookingIdInput);
+  const patientName = useDebouncedValue(patientNameInput);
+  const pickup = useDebouncedValue(pickupInput);
+  const dropoff = useDebouncedValue(dropoffInput);
 
   const [editing, setEditing] = useState<Trip | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<Trip | null>(null);
 
   const filters = useMemo<TripFilters>(() => {
-    if (exact) return { date: exact.format(API_DATE) };
-    const f: TripFilters = {};
-    if (from) f.from = from.format(API_DATE);
-    if (to) f.to = to.format(API_DATE);
+    const f: TripFilters = { date: date.format(API_DATE) };
+    if (bookingId) f.booking_id = bookingId;
+    if (patientName) f.patient_name = patientName;
+    if (pickup) f.pickup = pickup;
+    if (dropoff) f.dropoff = dropoff;
     return f;
-  }, [from, to, exact]);
+  }, [date, bookingId, patientName, pickup, dropoff]);
+
+  const hasClearableFilters = Boolean(
+    bookingIdInput || patientNameInput || pickupInput || dropoffInput || !date.isSame(dayjs(), 'day'),
+  );
+  const clearFilters = () => {
+    setDate(dayjs());
+    setBookingIdInput('');
+    setPatientNameInput('');
+    setPickupInput('');
+    setDropoffInput('');
+  };
 
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
@@ -70,13 +88,6 @@ export function TripsPage() {
       setPaginationModel((m) => ({ ...m, page: lastPage }));
     }
   }, [data, paginationModel.page, paginationModel.pageSize]);
-
-  const hasFilters = Boolean(from || to || exact);
-  const clear = () => {
-    setFrom(null);
-    setTo(null);
-    setExact(null);
-  };
 
   // Server returns trips newest-first (-date,-time) and we page server-side, so a
   // client column sort would only reorder the visible page — disable it and trust
@@ -190,55 +201,42 @@ export function TripsPage() {
         subtitle="All trips for your facility — most recent first."
       />
 
-      <Card sx={{ p: 2, mb: 2 }}>
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          sx={{ gap: 2, alignItems: { md: 'flex-end' }, flexWrap: 'wrap' }}
-        >
-          <Box>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>
-              Date range
-            </Typography>
-            <Stack direction="row" sx={{ gap: 1.5 }}>
-              <DatePicker
-                label="From"
-                value={from}
-                onChange={setFrom}
-                disabled={Boolean(exact)}
-                maxDate={to ?? undefined}
-                slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
-              />
-              <DatePicker
-                label="To"
-                value={to}
-                onChange={setTo}
-                disabled={Boolean(exact)}
-                minDate={from ?? undefined}
-                slotProps={{ textField: { size: 'small', sx: { width: 170 } } }}
-              />
-            </Stack>
-          </Box>
-          <Box>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>
-              Or a single day (overrides range)
-            </Typography>
-            <DatePicker
-              label="On date"
-              value={exact}
-              onChange={setExact}
-              slotProps={{
-                textField: { size: 'small', sx: { width: 170 } },
-                field: { clearable: true },
-              }}
-            />
-          </Box>
-          {hasFilters && (
-            <Button onClick={clear} startIcon={<ClearIcon />} color="inherit" sx={{ mb: 0.25 }}>
-              Clear
-            </Button>
-          )}
-        </Stack>
-      </Card>
+      <FilterBar onClear={clearFilters} hasClearableFilters={hasClearableFilters}>
+        <DatePicker
+          label="Date"
+          value={date}
+          onChange={(v) => v && setDate(v)}
+          slotProps={{ textField: { size: 'small', required: true, sx: { width: 170 } } }}
+        />
+        <TextField
+          label="Booking ID"
+          size="small"
+          value={bookingIdInput}
+          onChange={(e) => setBookingIdInput(e.target.value)}
+          sx={{ width: 170 }}
+        />
+        <TextField
+          label="Patient name"
+          size="small"
+          value={patientNameInput}
+          onChange={(e) => setPatientNameInput(e.target.value)}
+          sx={{ width: 190 }}
+        />
+        <TextField
+          label="Pickup"
+          size="small"
+          value={pickupInput}
+          onChange={(e) => setPickupInput(e.target.value)}
+          sx={{ width: 170 }}
+        />
+        <TextField
+          label="Drop-off"
+          size="small"
+          value={dropoffInput}
+          onChange={(e) => setDropoffInput(e.target.value)}
+          sx={{ width: 170 }}
+        />
+      </FilterBar>
 
       <DataTable<Trip>
         aria-label="Trips"
@@ -253,13 +251,13 @@ export function TripsPage() {
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         empty={{
-          title: hasFilters ? 'No trips in this range' : 'No trips yet',
-          description: hasFilters
-            ? 'Try widening the date range or clearing the filter.'
+          title: hasClearableFilters ? 'No trips match these filters' : 'No trips on this date',
+          description: hasClearableFilters
+            ? 'Try a different date or clearing the filters.'
             : 'Trips you book will appear here.',
-          action: hasFilters ? (
-            <Button variant="outlined" onClick={clear} startIcon={<ClearIcon />}>
-              Clear filter
+          action: hasClearableFilters ? (
+            <Button variant="outlined" onClick={clearFilters} startIcon={<ClearIcon />}>
+              Clear filters
             </Button>
           ) : undefined,
         }}

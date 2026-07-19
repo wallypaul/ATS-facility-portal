@@ -37,6 +37,13 @@ export function formatTime(value: string | null | undefined): string {
   return d.isValid() ? d.format('h:mm A') : value;
 }
 
+// Short table-column preview of a longer string, e.g. an address — full value
+// still available via the caller's tooltip/title.
+export function truncate(value: string | null | undefined, length = 5): string {
+  if (!value) return EM_DASH;
+  return value.length > length ? `${value.slice(0, length)}...` : value;
+}
+
 export function formatDistance(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') return EM_DASH;
   const n = typeof value === 'string' ? Number(value) : value;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -19,6 +19,7 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
@@ -27,11 +28,11 @@ import { StatusChip } from '../../components/StatusChip';
 import { Ref } from '../../components/Ref';
 import { Money } from '../../components/Money';
 import { ErrorState, EmptyState } from '../../components/StateViews';
-import { useInvoice } from '../../query/hooks';
+import { useBooking, useInvoice } from '../../query/hooks';
 import { downloadInvoice } from '../../api/payer';
 import type { InvoiceBiller } from '../../api/types';
 import { parseApiError } from '../../utils/errors';
-import { formatDate } from '../../utils/format';
+import { formatDate, formatTime } from '../../utils/format';
 import { MONO } from '../../theme';
 import { PayPanel } from './PayPanel';
 
@@ -121,6 +122,58 @@ function PaidConfirmation({ charged, balance }: { charged: number; balance: numb
   );
 }
 
+// Inline summary shown under a line item when its booking ref is expanded —
+// fetched lazily (only mounts on expand) via the same booking-detail query the
+// Bookings pages already use, so a repeat expand is instant from cache.
+function LineBookingSummary({ bookingRef }: { bookingRef: string }) {
+  const { data, isLoading, isError, error } = useBooking(bookingRef);
+
+  if (isLoading) {
+    return <Skeleton variant="rounded" height={64} sx={{ m: 1.5 }} />;
+  }
+  if (isError) {
+    return (
+      <Typography variant="body2" sx={{ color: 'error.main', p: 1.5 }}>
+        Could not load booking {bookingRef}: {parseApiError(error).detail ?? 'unknown error'}
+      </Typography>
+    );
+  }
+  if (!data) return null;
+
+  return (
+    <Box sx={{ p: 1.5 }}>
+      <Stack direction="row" sx={{ gap: 3, flexWrap: 'wrap', alignItems: 'center', mb: data.trips.length ? 1 : 0 }}>
+        <Field label="Patient" value={`${data.passenger.firstName} ${data.passenger.lastName}`} />
+        <Field label="Service" value={data.serviceData.service} />
+        <Box>
+          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+            Status
+          </Typography>
+          <StatusChip status={data.status} />
+        </Box>
+      </Stack>
+      {data.trips.map((trip) => (
+        <Stack
+          key={trip.uuid}
+          direction="row"
+          sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', color: 'text.secondary', mt: 0.5 }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            {trip.pick_up_address}
+          </Typography>
+          <ArrowRightAltIcon sx={{ fontSize: 16 }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            {trip.drop_off_address}
+          </Typography>
+          <Typography variant="body2">
+            · {formatDate(trip.date)} · {formatTime(trip.time)}
+          </Typography>
+        </Stack>
+      ))}
+    </Box>
+  );
+}
+
 export function InvoiceDetailPage() {
   const { uuid = '' } = useParams();
   const { data, isLoading, isError, error, refetch } = useInvoice(uuid);
@@ -129,6 +182,15 @@ export function InvoiceDetailPage() {
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [dlAnchor, setDlAnchor] = useState<HTMLElement | null>(null);
   const [dlError, setDlError] = useState(false);
+  const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
+  const toggleLine = (lineUuid: string) => {
+    setExpandedLines((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineUuid)) next.delete(lineUuid);
+      else next.add(lineUuid);
+      return next;
+    });
+  };
 
   const back = (
     <Link
@@ -299,27 +361,50 @@ export function InvoiceDetailPage() {
                   <TableCell align="right">Qty</TableCell>
                   <TableCell align="right">Unit price</TableCell>
                   <TableCell align="right">Amount</TableCell>
-                  <TableCell align="right">Trip</TableCell>
+                  <TableCell align="right">Booking</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.lines.map((line) => (
-                  <TableRow key={line.uuid} hover>
-                    <TableCell sx={{ maxWidth: 320 }}>{line.description}</TableCell>
-                    <TableCell align="right" sx={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                      {line.quantity}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Money value={line.unit_price} />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Money value={line.amount} emphasis />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: MONO, color: 'text.secondary' }}>
-                      {line.trip_id ?? '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {data.lines.map((line) => {
+                  const expanded = expandedLines.has(line.uuid);
+                  return (
+                    <Fragment key={line.uuid}>
+                      <TableRow hover>
+                        <TableCell sx={{ maxWidth: 320 }}>{line.description}</TableCell>
+                        <TableCell align="right" sx={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                          {line.quantity}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Money value={line.unit_price} />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Money value={line.amount} emphasis />
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: MONO }}>
+                          {line.booking_ref ? (
+                            <Link
+                              component="button"
+                              type="button"
+                              onClick={() => toggleLine(line.uuid)}
+                              sx={{ fontFamily: MONO, fontWeight: 600 }}
+                            >
+                              {line.booking_ref}
+                            </Link>
+                          ) : (
+                            <Box component="span" sx={{ color: 'text.secondary' }}>{line.trip_id ?? '—'}</Box>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      {expanded && line.booking_ref && (
+                        <TableRow>
+                          <TableCell colSpan={5} sx={{ p: 0, bgcolor: 'action.hover' }}>
+                            <LineBookingSummary bookingRef={line.booking_ref} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>

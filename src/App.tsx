@@ -14,6 +14,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
 import { AppShell } from './components/AppShell';
 import { RequirePayer } from './auth/RequirePayer';
 import { LoginPage } from './pages/login/LoginPage';
+import { ForgotPasswordPage } from './pages/login/ForgotPasswordPage';
 import { BookPage } from './pages/book/BookPage';
 import { BookingsPage } from './pages/bookings/BookingsPage';
 import { BookingDetailPage } from './pages/bookings/BookingDetailPage';
@@ -61,6 +62,7 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: '/login', element: <LoginPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
       {
         element: (
           <RequirePayer>

@@ -98,6 +98,8 @@ export interface BookingListItem {
   passenger_name: string;
   payer: string | null;
   trips_count: number;
+  first_trip_pickup: string | null;
+  first_trip_dropoff: string | null;
 }
 
 export interface BookingDetail {
@@ -137,6 +139,7 @@ export interface InvoiceLine {
   unit_price: string;
   amount: string;
   trip_id: number | null;
+  booking_ref: string; // '' when the line isn't tied to a booking
 }
 
 // Client-safe Square Web Payments config. `null` on the invoice when the payer

@@ -26,3 +26,22 @@ export async function changePassword(
 ): Promise<void> {
   await api.post('/user/auth/password-change/', { current_password, new_password });
 }
+
+// Forgot-password (logged-out) flow — step 1: email a 6-digit code. Always
+// resolves 200 (server never reveals whether the email has an account).
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  const { data } = await axios.post<{ detail: string }>(
+    `${baseURL}/user/auth/password-reset/`,
+    { email },
+  );
+  return data;
+}
+
+// Step 2: submit the emailed code + new password.
+export async function confirmPasswordReset(
+  email: string,
+  code: string,
+  new_password: string,
+): Promise<void> {
+  await axios.post(`${baseURL}/user/auth/password-reset/confirm/`, { email, code, new_password });
+}

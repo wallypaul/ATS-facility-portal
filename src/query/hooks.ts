@@ -17,6 +17,8 @@ import {
   getServices,
   getTrips,
   payInvoice,
+  type BookingFilters,
+  type InvoiceFilters,
   type PageParams,
   type TripFilters,
 } from '../api/payer';
@@ -44,10 +46,10 @@ export function useServices(payerUuid?: string) {
   });
 }
 
-export function useBookings(params: PageParams) {
+export function useBookings(filters: BookingFilters, params: PageParams) {
   return useQuery({
-    queryKey: queryKeys.bookings(params),
-    queryFn: () => getBookings(params),
+    queryKey: queryKeys.bookings(filters, params),
+    queryFn: () => getBookings(filters, params),
     placeholderData: (prev) => prev, // keep the current page visible while the next loads
   });
 }
@@ -68,10 +70,10 @@ export function useTrips(filters: TripFilters, params: PageParams) {
   });
 }
 
-export function useInvoices(params: PageParams) {
+export function useInvoices(filters: InvoiceFilters, params: PageParams) {
   return useQuery({
-    queryKey: queryKeys.invoices(params),
-    queryFn: () => getInvoices(params),
+    queryKey: queryKeys.invoices(filters, params),
+    queryFn: () => getInvoices(filters, params),
     placeholderData: (prev) => prev, // keep the current page visible while the next loads
   });
 }
