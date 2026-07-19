@@ -328,6 +328,7 @@ export function BookingDetailPage() {
         mode="add"
         bookingRef={data.ref}
         services={servicesQuery.data?.services ?? []}
+        bookingDate={data.trips[0]?.date ?? null}
       />
 
       {/* Cancel confirm */}
