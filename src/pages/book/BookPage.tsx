@@ -23,7 +23,9 @@ import dayjs from 'dayjs';
 
 import { PageHeader } from '../../components/PageHeader';
 import { FormTextField } from '../../components/form/FormTextField';
+import { FormAddressField } from '../../components/form/FormAddressField';
 import { FormSelect } from '../../components/form/FormSelect';
+import { FormSwitch } from '../../components/form/FormSwitch';
 import { FormDatePicker } from '../../components/form/FormDatePicker';
 import { FormTimePicker } from '../../components/form/FormTimePicker';
 import { Money } from '../../components/Money';
@@ -53,6 +55,8 @@ const schema = z.object({
     dob: dobSchema,
   }),
   passengers: z.coerce.number().int().min(1, 'At least 1').max(20, 'Too many'),
+  toll: z.boolean().default(false),
+  weight: z.coerce.number().min(0).optional(),
   tripsData: z.array(legSchema).min(1, 'Add at least one leg'),
 });
 
@@ -85,6 +89,8 @@ export function BookPage() {
     defaultValues: {
       passenger: { firstName: '', lastName: '', email: '', phone_1: '', dob: null as never },
       passengers: 1,
+      toll: false,
+      weight: undefined,
       tripsData: [emptyLeg('')],
     },
   });
@@ -110,6 +116,8 @@ export function BookPage() {
         service_level: leg.service_level,
         origin: leg.pick_up_address,
         destination: leg.drop_off_address,
+        toll: getValues('toll'),
+        weight: getValues('weight'),
       });
       setQuotes((q) => ({ ...q, [fieldId]: result }));
     } catch (err) {
@@ -135,6 +143,8 @@ export function BookPage() {
         // the portal flow uses "2" (Ambulatory) as in the documented request.
         service: '2',
         passengers: values.passengers,
+        toll: values.toll,
+        weight: values.weight,
       },
       tripsData: values.tripsData.map((l) => ({
         pick_up_address: l.pick_up_address.trim(),
@@ -247,6 +257,18 @@ export function BookPage() {
               slotProps={{ htmlInput: { min: 1, max: 20 } }}
             />
           </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormTextField
+              control={control}
+              name="weight"
+              label="Weight"
+              type="number"
+              slotProps={{ htmlInput: { min: 0 } }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormSwitch control={control} name="toll" label="Include toll" />
+          </Grid>
         </Grid>
       </Card>
 
@@ -350,10 +372,10 @@ function LegCard({
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <FormTextField control={control} name={`tripsData.${index}.pick_up_address`} label="Pickup address" />
+          <FormAddressField control={control} name={`tripsData.${index}.pick_up_address`} label="Pickup address" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <FormTextField control={control} name={`tripsData.${index}.drop_off_address`} label="Drop-off address" />
+          <FormAddressField control={control} name={`tripsData.${index}.drop_off_address`} label="Drop-off address" />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <FormDatePicker control={control} name={`tripsData.${index}.date`} label="Date" disablePast />

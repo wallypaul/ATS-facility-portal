@@ -65,6 +65,8 @@ export interface ServiceData {
   passengers: number;
   companion?: string | number;
   comments?: string;
+  toll?: boolean;
+  weight?: number;
 }
 
 // What a PAYER reads for a trip: the full planned trip + pricing, PLUS the four
@@ -173,6 +175,8 @@ export interface QuoteRequest {
   origin: string;
   destination: string;
   payer_uuid?: string;
+  toll?: boolean;
+  weight?: number;
 }
 
 export interface TripInput {
